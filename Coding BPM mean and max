@@ -1,0 +1,79 @@
+################################################################################
+# Woodruff & van Dijk Framework: BPM Outcome Aggregation (Participant-Level)
+#
+# Purpose
+# -------
+# This script collapses repeated Brief Problem Monitor (BPM) observations into a
+# single participant-level outcome dataset for downstream causal analyses.
+#
+# In the Woodruff & van Dijk framework, prenatal exposure models require one row
+# per participant. Because BPM scores may be observed at multiple timepoints and/or
+# informants, this script computes summary outcomes per participant for the BPM
+# domains used in primary analyses.
+#
+# What this code does
+# -------------------
+# Starting from the BPM long-format dataset (BPM), this script:
+#   1. Groups records by participant_id
+#   2. Computes TWO participant-level summaries for each BPM outcome:
+#        - *_max  : maximum observed score across available assessments
+#        - *_mean : mean observed score across available assessments
+#   3. Preserves missingness: if all values for a participant are NA for a given
+#      outcome, the resulting summary is set to NA (rather than -Inf/NaN).
+#   4. Outputs a wide participant-level table (bpm_max_scores) suitable for
+#      merging into the analytic dataset used for ATT weighting and outcome models.
+#
+# Required Input Data
+# -------------------
+# Assumes a data.frame named BPM exists in memory containing:
+#
+# Identifiers
+#   - participant_id
+#
+# BPM outcomes (continuous)
+#   - mh_t_bpm__ext_sum   : Teacher-report BPM Externalizing summary score
+#   - mh_y_bpm__int_sum   : Youth self-report BPM Internalizing summary score
+#
+# Output
+# ------
+# bpm_max_scores (one row per participant_id) with:
+#   - mh_t_bpm__ext_sum_max
+#   - mh_t_bpm__ext_sum_mean
+#   - mh_y_bpm__int_sum_max
+#   - mh_y_bpm__int_sum_mean
+#
+# Notes
+# -----
+# * The choice of max vs mean reflects two defensible outcome definitions:
+#     - max  captures peak symptom burden across follow-up
+#     - mean captures average symptom burden across follow-up
+# * If you later prefer a specific follow-up window (e.g., age-restricted or
+#   fixed event-time), filter BPM before running this aggregation step.
+################################################################################
+
+
+library(dplyr)
+
+bpm_max_scores <- BPM %>%
+  group_by(participant_id) %>%
+  summarise(
+    # ---- TEACHER EXTERNALIZING ----
+    mh_t_bpm__ext_sum_max =
+      if (all(is.na(mh_t_bpm__ext_sum))) NA_real_
+      else max(mh_t_bpm__ext_sum, na.rm = TRUE),
+
+    mh_t_bpm__ext_sum_mean =
+      if (all(is.na(mh_t_bpm__ext_sum))) NA_real_
+      else mean(mh_t_bpm__ext_sum, na.rm = TRUE),
+
+    # ---- YOUTH INTERNALIZING ----
+    mh_y_bpm__int_sum_max =
+      if (all(is.na(mh_y_bpm__int_sum))) NA_real_
+      else max(mh_y_bpm__int_sum, na.rm = TRUE),
+
+    mh_y_bpm__int_sum_mean =
+      if (all(is.na(mh_y_bpm__int_sum))) NA_real_
+      else mean(mh_y_bpm__int_sum, na.rm = TRUE),
+
+    .groups = "drop"
+  )
