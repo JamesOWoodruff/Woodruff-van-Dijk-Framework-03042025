@@ -1,0 +1,187 @@
+################################################################################
+# Woodruff & van Dijk Framework: Covariate Cleaning and Coding
+#
+# Purpose
+# -------
+# This script prepares baseline demographic covariates from the ABCD dataset
+# for use in the Woodruff & van Dijk causal inference framework examining the
+# association between prenatal SSRI exposure and child behavioral outcomes.
+#
+# Specifically, this script:
+#   1. Restricts the ABCD covariate dataset to baseline assessments (ses-00A)
+#   2. Recodes special missing values to NA where appropriate
+#   3. Converts key demographic variables to factors for proper modeling
+#   4. Assigns human-readable labels to categorical variables
+#   5. Verifies correct structure of covariates before merging into the
+#      analytic dataset used for propensity score estimation
+#
+# These covariates are later incorporated into propensity score models used
+# to generate ATT weights (via WeightIt) in the Woodruff & van Dijk framework.
+#
+# ------------------------------------------------------------------------------
+# Required ABCD Variables
+# ------------------------------------------------------------------------------
+#
+# participant_id
+#   Unique participant identifier used to merge datasets.
+#
+# session_id
+#   ABCD visit identifier; this script restricts analyses to baseline (ses-00A).
+#
+# ab_g_stc__cohort_sex
+#   Participant sex
+#   Values:
+#       1 = Male
+#       2 = Female
+#   Used as a demographic covariate in propensity score estimation.
+#
+# ab_g_stc__cohort_ethnrace__mblack
+#   Ethno-racial identity (7-level categorical variable)
+#   Values:
+#       1  = Hispanic
+#       2  = White (Non-Hispanic)
+#       3  = Black (Non-Hispanic)
+#       7  = Asian/Pacific Islander (Non-Hispanic)
+#       9  = Multiracial (Black)
+#       10 = Multiracial (Non-Black)
+#       13 = Other (Non-Hispanic)
+#   Used as a categorical demographic covariate.
+#
+# ab_g_dyn__cohort_income__hhold__6lvl
+#   Household income (6-level aggregated variable)
+#   Values:
+#       1 = <$25,000
+#       2 = $25,000–49,999
+#       3 = $50,000–74,999
+#       4 = $75,000–99,999
+#       5 = $100,000–199,999
+#       6 = $200,000+
+#       777 = Decline to answer
+#       999 = Don't know
+#   Special missing values (777, 999) are recoded to NA before analysis.
+#
+# ab_g_dyn__cohort_edu__cgs
+#   Highest caregiver education level
+#   Values:
+#       1 = Up to high school (No diploma)
+#       2 = High school diploma / GED
+#       3 = Some college
+#       4 = Bachelor's degree
+#       5 = Graduate or professional degree
+#
+# ------------------------------------------------------------------------------
+# Output
+# ------------------------------------------------------------------------------
+#
+# A cleaned baseline dataset (Cov_baseline) containing properly formatted
+# demographic covariates ready to be merged into the analytic dataset used
+# for propensity score weighting and downstream outcome modeling.
+#
+# ------------------------------------------------------------------------------
+# Repository Context
+# ------------------------------------------------------------------------------
+#
+# This script is part of the Woodruff & van Dijk Framework, which implements
+# inverse probability weighting with ATT estimands to estimate the causal
+# association between prenatal SSRI exposure and offspring behavioral outcomes
+# while accounting for maternal psychiatric severity, familial liability, and
+# socioeconomic confounding.
+#
+################################################################################
+
+################################################################################################################################################################
+################################################################################################################################################################
+# CODE START
+# CODE START
+# CODE START
+################################################################################################################################################################
+################################################################################################################################################################
+
+# cleaning and coding covariates
+library(dplyr)
+
+# -----------------------------
+# 1) Baseline only
+# -----------------------------
+Cov_baseline <- Cov %>%
+  filter(session_id == "ses-00A")
+
+# sanity check
+n_distinct(Cov_baseline$participant_id)
+nrow(Cov_baseline)
+
+# -----------------------------
+# 2) Recode / label key covariates
+#   - Income (6-level): treat special missing as NA; label levels
+#   - Race/ethnicity (7-level): factor + labels
+#   - Sex: factor + labels
+#   - Education (5-level): factor + labels
+# -----------------------------
+Cov_baseline <- Cov_baseline %>%
+  mutate(
+    # 6-level income: set special missing codes to NA
+    ab_g_dyn__cohort_income__hhold__6lvl = na_if(ab_g_dyn__cohort_income__hhold__6lvl, 777),
+    ab_g_dyn__cohort_income__hhold__6lvl = na_if(ab_g_dyn__cohort_income__hhold__6lvl, 999),
+
+    # label income (assumes 1–6 correspond to these bins)
+    ab_g_dyn__cohort_income__hhold__6lvl = factor(
+      ab_g_dyn__cohort_income__hhold__6lvl,
+      levels = c(1, 2, 3, 4, 5, 6),
+      labels = c(
+        "<$25,000",
+        "$25,000–49,999",
+        "$50,000–74,999",
+        "$75,000–99,999",
+        "$100,000–199,999",
+        "$200,000+"
+      )
+    ),
+
+    # sex (nominal)
+    ab_g_stc__cohort_sex = factor(
+      ab_g_stc__cohort_sex,
+      levels = c(1, 2),
+      labels = c("Male", "Female")
+    ),
+
+    # race/ethnicity (nominal; 7 categories coded 1,2,3,7,9,10,13)
+    ab_g_stc__cohort_ethnrace__mblack = factor(
+      ab_g_stc__cohort_ethnrace__mblack,
+      levels = c(1, 2, 3, 7, 9, 10, 13),
+      labels = c(
+        "Hispanic",
+        "White (Non-Hispanic)",
+        "Black (Non-Hispanic)",
+        "Asian/Pacific Islander (Non-Hispanic)",
+        "Multiracial (Black)",
+        "Multiracial (Non-Black)",
+        "Other (Non-Hispanic)"
+      )
+    ),
+
+    # education (ordinal but best handled as factor in PS model)
+    ab_g_dyn__cohort_edu__cgs = factor(
+      ab_g_dyn__cohort_edu__cgs,
+      levels = c(1, 2, 3, 4, 5),
+      labels = c(
+        "≤ High School (No diploma)",
+        "High School/GED",
+        "Some College",
+        "Bachelor's",
+        "Graduate/Professional"
+      )
+    )
+  )
+
+# -----------------------------
+# 3) Verify
+# -----------------------------
+str(Cov_baseline$ab_g_dyn__cohort_income__hhold__6lvl)
+str(Cov_baseline$ab_g_stc__cohort_sex)
+str(Cov_baseline$ab_g_stc__cohort_ethnrace__mblack)
+str(Cov_baseline$ab_g_dyn__cohort_edu__cgs)
+
+table(Cov_baseline$ab_g_dyn__cohort_income__hhold__6lvl, useNA = "ifany")
+table(Cov_baseline$ab_g_stc__cohort_sex, useNA = "ifany")
+table(Cov_baseline$ab_g_stc__cohort_ethnrace__mblack, useNA = "ifany")
+table(Cov_baseline$ab_g_dyn__cohort_edu__cgs, useNA = "ifany")
