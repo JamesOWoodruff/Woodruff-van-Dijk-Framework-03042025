@@ -1,102 +1,9 @@
 ################################################################################
 # Woodruff & van Dijk Framework: Covariate Cleaning and Coding
-#
-# Purpose
-# This script prepares baseline demographic covariates from the ABCD dataset
-# for use in the Woodruff & van Dijk causal inference framework examining the
-# association between prenatal SSRI exposure and child behavioral outcomes.
-#
-# Specifically, this script:
-#   1. Restricts the ABCD covariate dataset to baseline assessments (ses-00A)
-#   2. Recodes special missing values to NA where appropriate
-#   3. Converts key demographic variables to factors for proper modeling
-#   4. Assigns human-readable labels to categorical variables
-#   5. Verifies correct structure of covariates before merging into the
-#      analytic dataset used for propensity score estimation
-#
-# These covariates are later incorporated into propensity score models used
-# to generate ATT weights (via WeightIt) in the Woodruff & van Dijk framework.
-#
-# ------------------------------------------------------------------------------
-# Required ABCD Variables
-# ------------------------------------------------------------------------------
-#
-# participant_id
-#   Unique participant identifier used to merge datasets.
-#
-# session_id
-#   ABCD visit identifier; this script restricts analyses to baseline (ses-00A).
-#
-# ab_g_stc__cohort_sex
-#   Participant sex
-#   Values:
-#       1 = Male
-#       2 = Female
-#   Used as a demographic covariate in propensity score estimation.
-#
-# ab_g_stc__cohort_ethnrace__mblack
-#   Ethno-racial identity (7-level categorical variable)
-#   Values:
-#       1  = Hispanic
-#       2  = White (Non-Hispanic)
-#       3  = Black (Non-Hispanic)
-#       7  = Asian/Pacific Islander (Non-Hispanic)
-#       9  = Multiracial (Black)
-#       10 = Multiracial (Non-Black)
-#       13 = Other (Non-Hispanic)
-#   Used as a categorical demographic covariate.
-#
-# ab_g_dyn__cohort_income__hhold__6lvl
-#   Household income (6-level aggregated variable)
-#   Values:
-#       1 = <$25,000
-#       2 = $25,000–49,999
-#       3 = $50,000–74,999
-#       4 = $75,000–99,999
-#       5 = $100,000–199,999
-#       6 = $200,000+
-#       777 = Decline to answer
-#       999 = Don't know
-#   Special missing values (777, 999) are recoded to NA before analysis.
-#
-# ab_g_dyn__cohort_edu__cgs
-#   Highest caregiver education level
-#   Values:
-#       1 = Up to high school (No diploma)
-#       2 = High school diploma / GED
-#       3 = Some college
-#       4 = Bachelor's degree
-#       5 = Graduate or professional degree
-#
-# ------------------------------------------------------------------------------
-# Output
-# ------------------------------------------------------------------------------
-#
-# A cleaned baseline dataset (Cov_baseline) containing properly formatted
-# demographic covariates ready to be merged into the analytic dataset used
-# for propensity score weighting and downstream outcome modeling.
-#
-# ------------------------------------------------------------------------------
-# Repository Context
-# ------------------------------------------------------------------------------
-#
-# This script is part of the Woodruff & van Dijk Framework, which implements
-# inverse probability weighting with ATT estimands to estimate the causal
-# association between prenatal SSRI exposure and offspring behavioral outcomes
-# while accounting for maternal psychiatric severity, familial liability, and
-# socioeconomic confounding.
-#
+# REVISED: Added mat_race, mom_age_preg, planned_preg, prenatal_vit,
+#          mh_p_famhx__dep__moth_001; removed child sex and child race
 ################################################################################
 
-################################################################################################################################################################
-################################################################################################################################################################
-# CODE START
-# CODE START
-# CODE START
-################################################################################################################################################################
-################################################################################################################################################################
-
-# cleaning and coding covariates
 library(dplyr)
 
 # -----------------------------
@@ -111,76 +18,146 @@ nrow(Cov_baseline)
 
 # -----------------------------
 # 2) Recode / label key covariates
-#   - Income (6-level): treat special missing as NA; label levels
-#   - Race/ethnicity (7-level): factor + labels
-#   - Sex: factor + labels
-#   - Education (5-level): factor + labels
 # -----------------------------
 Cov_baseline <- Cov_baseline %>%
   mutate(
-    # 6-level income: set special missing codes to NA
+
+    # --- Income (6-level): special missing -> NA, then factor ---
     ab_g_dyn__cohort_income__hhold__6lvl = na_if(ab_g_dyn__cohort_income__hhold__6lvl, 777),
     ab_g_dyn__cohort_income__hhold__6lvl = na_if(ab_g_dyn__cohort_income__hhold__6lvl, 999),
-
-    # label income (assumes 1–6 correspond to these bins)
     ab_g_dyn__cohort_income__hhold__6lvl = factor(
       ab_g_dyn__cohort_income__hhold__6lvl,
       levels = c(1, 2, 3, 4, 5, 6),
       labels = c(
         "<$25,000",
-        "$25,000–49,999",
-        "$50,000–74,999",
-        "$75,000–99,999",
-        "$100,000–199,999",
+        "$25,000-49,999",
+        "$50,000-74,999",
+        "$75,000-99,999",
+        "$100,000-199,999",
         "$200,000+"
       )
     ),
 
-    # sex (nominal)
-    ab_g_stc__cohort_sex = factor(
-      ab_g_stc__cohort_sex,
-      levels = c(1, 2),
-      labels = c("Male", "Female")
-    ),
-
-    # race/ethnicity (nominal; 7 categories coded 1,2,3,7,9,10,13)
-    ab_g_stc__cohort_ethnrace__mblack = factor(
-      ab_g_stc__cohort_ethnrace__mblack,
-      levels = c(1, 2, 3, 7, 9, 10, 13),
-      labels = c(
-        "Hispanic",
-        "White (Non-Hispanic)",
-        "Black (Non-Hispanic)",
-        "Asian/Pacific Islander (Non-Hispanic)",
-        "Multiracial (Black)",
-        "Multiracial (Non-Black)",
-        "Other (Non-Hispanic)"
-      )
-    ),
-
-    # education (ordinal but best handled as factor in PS model)
+    # --- Education (5-level ordinal, treated as factor) ---
     ab_g_dyn__cohort_edu__cgs = factor(
       ab_g_dyn__cohort_edu__cgs,
       levels = c(1, 2, 3, 4, 5),
       labels = c(
-        "≤ High School (No diploma)",
+        "<= High School (No diploma)",
         "High School/GED",
         "Some College",
         "Bachelor's",
         "Graduate/Professional"
       )
+    ),
+
+    # --- Mother age at pregnancy (rename for legibility) ---
+    mom_age_preg = as.numeric(ab_p_demo__age__slf_001),
+
+    # --- Planned pregnancy: 999 -> NA, then factor ---
+    planned_preg = na_if(as.numeric(ph_p_dhx_006), 999),
+    planned_preg = factor(
+      planned_preg,
+      levels = c(0, 1),
+      labels = c("No", "Yes")
+    ),
+
+    # --- Prenatal vitamins: 999/444 -> NA, then factor ---
+    prenatal_vit = na_if(as.numeric(ph_p_dhx__vit_001), 999),
+    prenatal_vit = na_if(prenatal_vit, 444),
+    prenatal_vit = factor(
+      prenatal_vit,
+      levels = c(0, 1),
+      labels = c("No", "Yes")
+    ),
+
+    # --- Mother history of depression: 777/888/999 -> NA, then factor ---
+    mh_p_famhx__dep__moth_001 = na_if(as.numeric(mh_p_famhx__dep__moth_001), 777),
+    mh_p_famhx__dep__moth_001 = na_if(mh_p_famhx__dep__moth_001, 888),
+    mh_p_famhx__dep__moth_001 = na_if(mh_p_famhx__dep__moth_001, 999),
+    mh_p_famhx__dep__moth_001 = factor(
+      mh_p_famhx__dep__moth_001,
+      levels = c(0, 1),
+      labels = c("No", "Yes")
     )
   )
 
 # -----------------------------
-# 3) Verify
+# 3) Derive mat_race from multi-select indicators
+#    Logic: if more than one category TRUE -> Multiracial
+#           if exactly one TRUE -> that category
+#           if none TRUE or all NA -> NA
+# -----------------------------
+
+Cov_baseline <- Cov_baseline %>%
+  mutate(
+    .r_white = as.numeric(ab_p_demo__race__slf_001___10) == 1,
+    .r_black = as.numeric(ab_p_demo__race__slf_001___11) == 1,
+    .r_aian  = as.numeric(ab_p_demo__race__slf_001___12) == 1 |  # Am. Indian
+               as.numeric(ab_p_demo__race__slf_001___13) == 1,   # Alaska Native
+    .r_nhpi  = as.numeric(ab_p_demo__race__slf_001___14) == 1 |  # Native Hawaiian
+               as.numeric(ab_p_demo__race__slf_001___15) == 1 |  # Guamanian
+               as.numeric(ab_p_demo__race__slf_001___16) == 1 |  # Samoan
+               as.numeric(ab_p_demo__race__slf_001___17) == 1,   # Other Pacific Islander
+    .r_asian = as.numeric(ab_p_demo__race__slf_001___18) == 1 |  # Asian Indian
+               as.numeric(ab_p_demo__race__slf_001___19) == 1 |  # Chinese
+               as.numeric(ab_p_demo__race__slf_001___20) == 1 |  # Filipino
+               as.numeric(ab_p_demo__race__slf_001___21) == 1 |  # Japanese
+               as.numeric(ab_p_demo__race__slf_001___22) == 1 |  # Korean
+               as.numeric(ab_p_demo__race__slf_001___23) == 1 |  # Vietnamese
+               as.numeric(ab_p_demo__race__slf_001___24) == 1,   # Other Asian
+    .r_other = as.numeric(ab_p_demo__race__slf_001___25) == 1,   # Other Race
+    .r_dta   = as.numeric(ab_p_demo__race__slf_001___777) == 1,  # Decline to answer
+    .r_dk    = as.numeric(ab_p_demo__race__slf_001___999) == 1,  # Don't know
+
+    # Sum of substantive race flags only
+    .r_sum = rowSums(
+      cbind(.r_white, .r_black, .r_aian, .r_nhpi, .r_asian, .r_other),
+      na.rm = TRUE
+    ),
+
+    mat_race = case_when(
+      .r_dta | .r_dk               ~ NA_character_,
+      .r_sum > 1                   ~ "Multiracial",
+      .r_white & .r_sum == 1      ~ "White",
+      .r_black & .r_sum == 1      ~ "Black/African American",
+      .r_aian  & .r_sum == 1      ~ "American Indian/Alaska Native",
+      .r_nhpi  & .r_sum == 1      ~ "Native Hawaiian/Pacific Islander",
+      .r_asian & .r_sum == 1      ~ "Asian",
+      .r_other & .r_sum == 1      ~ "Other",
+      .r_sum == 0                  ~ NA_character_,
+      TRUE                         ~ NA_character_
+    ),
+
+    mat_race = factor(mat_race, levels = c(
+      "White",
+      "Black/African American",
+      "American Indian/Alaska Native",
+      "Native Hawaiian/Pacific Islander",
+      "Asian",
+      "Other",
+      "Multiracial"
+    ))
+  ) %>%
+  select(-starts_with(".r_"))
+
+# -----------------------------
+# 4) Verify
 # -----------------------------
 str(Cov_baseline$ab_g_dyn__cohort_income__hhold__6lvl)
-str(Cov_baseline$ab_g_stc__cohort_sex)
-str(Cov_baseline$ab_g_stc__cohort_ethnrace__mblack)
 str(Cov_baseline$ab_g_dyn__cohort_edu__cgs)
+str(Cov_baseline$mom_age_preg)
+str(Cov_baseline$planned_preg)
+str(Cov_baseline$prenatal_vit)
+str(Cov_baseline$mh_p_famhx__dep__moth_001)
+str(Cov_baseline$mat_race)
 
 table(Cov_baseline$ab_g_dyn__cohort_income__hhold__6lvl, useNA = "ifany")
-table(Cov_baseline$ab_g_stc__cohort_sex, useNA = "ifany")
-table(Cov_baseline$ab_g_stc__cohort_ethnrace__mblack, useNA = "ifany")
 table(Cov_baseline$ab_g_dyn__cohort_edu__cgs, useNA = "ifany")
+table(Cov_baseline$planned_preg, useNA = "ifany")
+table(Cov_baseline$prenatal_vit, useNA = "ifany")
+table(Cov_baseline$mh_p_famhx__dep__moth_001, useNA = "ifany")
+table(Cov_baseline$mat_race, useNA = "ifany")
+summary(Cov_baseline$mom_age_preg)
+
+
