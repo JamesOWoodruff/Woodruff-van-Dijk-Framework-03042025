@@ -1,161 +1,123 @@
 ################################################################################
-# Woodruff & van Dijk Framework: Covariate Cleaning and Coding
-# REVISED: Added mat_race, mom_age_preg, planned_preg, prenatal_vit,
-#          mh_p_famhx__dep__moth_001; removed child sex and child race
+# Woodruff & van Dijk Framework: Behavioral Outcome Aggregation
+# (BPM + CBCL Participant-Level Outcomes)
+#
+# Purpose
+# -------
+# This script collapses repeated behavioral assessments into participant-level
+# outcome variables for use in the Woodruff & van Dijk causal inference framework.
+#
+# Because prenatal exposure analyses require one observation per participant,
+# this script aggregates repeated Brief Problem Monitor (BPM) and Child Behavior
+# Checklist (CBCL) assessments into summary outcomes.
+#
+# The script computes both:
+#   - Maximum score across all available assessments (max)
+#   - Mean score across all available assessments (mean)
+#
+# These two summaries represent:
+#   max  → peak symptom burden across follow-up
+#   mean → average symptom burden across follow-up
+#
+# Missingness is preserved: if all values for a participant are NA for a given
+# outcome, the resulting summary value is set to NA rather than returning
+# -Inf or NaN.
+#
+# ------------------------------------------------------------------------------
+# Required Input Data
+# ------------------------------------------------------------------------------
+# Assumes a data.frame named BPM exists in memory containing repeated measures
+# of behavioral outcomes with the following variables:
+#
+# Identifiers
+#   participant_id
+#   session_id
+#
+# Teacher-report BPM outcomes
+#   mh_t_bpm__ext_sum   : Teacher BPM Externalizing raw sum score
+#
+# Youth self-report BPM outcomes
+#   mh_y_bpm__int_sum   : Youth BPM Internalizing raw sum score
+#
+# Parent-report CBCL outcomes
+#   mh_p_cbcl__synd__int_sum : CBCL Internalizing syndrome raw sum score
+#   mh_p_cbcl__synd__ext_sum : CBCL Externalizing syndrome raw sum score
+#
+# ------------------------------------------------------------------------------
+# Output
+# ------------------------------------------------------------------------------
+# bpm_max_scores
+#
+# A participant-level dataset containing:
+#
+# Teacher BPM outcomes
+#   mh_t_bpm__ext_sum_max
+#   mh_t_bpm__ext_sum_mean
+#
+# Youth BPM outcomes
+#   mh_y_bpm__int_sum_max
+#   mh_y_bpm__int_sum_mean
+#
+# Parent CBCL outcomes
+#   mh_p_cbcl__synd__int_sum_max
+#   mh_p_cbcl__synd__int_sum_mean
+#   mh_p_cbcl__synd__ext_sum_max
+#   mh_p_cbcl__synd__ext_sum_mean
+#
+# ------------------------------------------------------------------------------
+# Repository Context
+# ------------------------------------------------------------------------------
+# These participant-level behavioral outcomes serve as dependent variables in
+# ATT-weighted regression models evaluating the association between prenatal
+# SSRI exposure and offspring psychopathology within the Woodruff & van Dijk
+# framework.
+#
 ################################################################################
 
 library(dplyr)
 
-# -----------------------------
-# 1) Baseline only
-# -----------------------------
-Cov_baseline <- Cov %>%
-  filter(session_id == "ses-00A")
+bpm_max_scores <- BPM %>%
+  group_by(participant_id) %>%
+  summarise(
+    # ---- TEACHER EXTERNALIZING (BPM) ----
+    mh_t_bpm__ext_sum_max =
+      if (all(is.na(mh_t_bpm__ext_sum))) NA_real_
+      else max(mh_t_bpm__ext_sum, na.rm = TRUE),
 
-# sanity check
-n_distinct(Cov_baseline$participant_id)
-nrow(Cov_baseline)
+    mh_t_bpm__ext_sum_mean =
+      if (all(is.na(mh_t_bpm__ext_sum))) NA_real_
+      else mean(mh_t_bpm__ext_sum, na.rm = TRUE),
 
-# -----------------------------
-# 2) Recode / label key covariates
-# -----------------------------
-Cov_baseline <- Cov_baseline %>%
-  mutate(
+    # ---- YOUTH INTERNALIZING (BPM) ----
+    mh_y_bpm__int_sum_max =
+      if (all(is.na(mh_y_bpm__int_sum))) NA_real_
+      else max(mh_y_bpm__int_sum, na.rm = TRUE),
 
-    # --- Income (6-level): special missing -> NA, then factor ---
-    ab_g_dyn__cohort_income__hhold__6lvl = na_if(ab_g_dyn__cohort_income__hhold__6lvl, 777),
-    ab_g_dyn__cohort_income__hhold__6lvl = na_if(ab_g_dyn__cohort_income__hhold__6lvl, 999),
-    ab_g_dyn__cohort_income__hhold__6lvl = factor(
-      ab_g_dyn__cohort_income__hhold__6lvl,
-      levels = c(1, 2, 3, 4, 5, 6),
-      labels = c(
-        "<$25,000",
-        "$25,000-49,999",
-        "$50,000-74,999",
-        "$75,000-99,999",
-        "$100,000-199,999",
-        "$200,000+"
-      )
-    ),
+    mh_y_bpm__int_sum_mean =
+      if (all(is.na(mh_y_bpm__int_sum))) NA_real_
+      else mean(mh_y_bpm__int_sum, na.rm = TRUE),
 
-    # --- Education (5-level ordinal, treated as factor) ---
-    ab_g_dyn__cohort_edu__cgs = factor(
-      ab_g_dyn__cohort_edu__cgs,
-      levels = c(1, 2, 3, 4, 5),
-      labels = c(
-        "<= High School (No diploma)",
-        "High School/GED",
-        "Some College",
-        "Bachelor's",
-        "Graduate/Professional"
-      )
-    ),
+    # ---- PARENT INTERNALIZING (CBCL) ----
+    # Using CBCL syndrome internalizing sum score:
+    #   mh_p_cbcl__synd__int_sum
+    mh_p_cbcl__synd__int_sum_max =
+      if (all(is.na(mh_p_cbcl__synd__int_sum))) NA_real_
+      else max(mh_p_cbcl__synd__int_sum, na.rm = TRUE),
 
-    # --- Mother age at pregnancy (rename for legibility) ---
-    mom_age_preg = as.numeric(ab_p_demo__age__slf_001),
+    mh_p_cbcl__synd__int_sum_mean =
+      if (all(is.na(mh_p_cbcl__synd__int_sum))) NA_real_
+      else mean(mh_p_cbcl__synd__int_sum, na.rm = TRUE),
 
-    # --- Planned pregnancy: 999 -> NA, then factor ---
-    planned_preg = na_if(as.numeric(ph_p_dhx_006), 999),
-    planned_preg = factor(
-      planned_preg,
-      levels = c(0, 1),
-      labels = c("No", "Yes")
-    ),
+    # ---- PARENT EXTERNALIZING (CBCL) ----
+    # Using CBCL syndrome externalizing sum score:
+    #   mh_p_cbcl__synd__ext_sum
+    mh_p_cbcl__synd__ext_sum_max =
+      if (all(is.na(mh_p_cbcl__synd__ext_sum))) NA_real_
+      else max(mh_p_cbcl__synd__ext_sum, na.rm = TRUE),
 
-    # --- Prenatal vitamins: 999/444 -> NA, then factor ---
-    prenatal_vit = na_if(as.numeric(ph_p_dhx__vit_001), 999),
-    prenatal_vit = na_if(prenatal_vit, 444),
-    prenatal_vit = factor(
-      prenatal_vit,
-      levels = c(0, 1),
-      labels = c("No", "Yes")
-    ),
+    mh_p_cbcl__synd__ext_sum_mean =
+      if (all(is.na(mh_p_cbcl__synd__ext_sum))) NA_real_
+      else mean(mh_p_cbcl__synd__ext_sum, na.rm = TRUE),
 
-    # --- Mother history of depression: 777/888/999 -> NA, then factor ---
-    mh_p_famhx__dep__moth_001 = na_if(as.numeric(mh_p_famhx__dep__moth_001), 777),
-    mh_p_famhx__dep__moth_001 = na_if(mh_p_famhx__dep__moth_001, 888),
-    mh_p_famhx__dep__moth_001 = na_if(mh_p_famhx__dep__moth_001, 999),
-    mh_p_famhx__dep__moth_001 = factor(
-      mh_p_famhx__dep__moth_001,
-      levels = c(0, 1),
-      labels = c("No", "Yes")
-    )
+    .groups = "drop"
   )
-
-# -----------------------------
-# 3) Derive mat_race from multi-select indicators
-#    Logic: if more than one category TRUE -> Multiracial
-#           if exactly one TRUE -> that category
-#           if none TRUE or all NA -> NA
-# -----------------------------
-
-Cov_baseline <- Cov_baseline %>%
-  mutate(
-    .r_white = as.numeric(ab_p_demo__race__slf_001___10) == 1,
-    .r_black = as.numeric(ab_p_demo__race__slf_001___11) == 1,
-    .r_aian  = as.numeric(ab_p_demo__race__slf_001___12) == 1 |  # Am. Indian
-               as.numeric(ab_p_demo__race__slf_001___13) == 1,   # Alaska Native
-    .r_nhpi  = as.numeric(ab_p_demo__race__slf_001___14) == 1 |  # Native Hawaiian
-               as.numeric(ab_p_demo__race__slf_001___15) == 1 |  # Guamanian
-               as.numeric(ab_p_demo__race__slf_001___16) == 1 |  # Samoan
-               as.numeric(ab_p_demo__race__slf_001___17) == 1,   # Other Pacific Islander
-    .r_asian = as.numeric(ab_p_demo__race__slf_001___18) == 1 |  # Asian Indian
-               as.numeric(ab_p_demo__race__slf_001___19) == 1 |  # Chinese
-               as.numeric(ab_p_demo__race__slf_001___20) == 1 |  # Filipino
-               as.numeric(ab_p_demo__race__slf_001___21) == 1 |  # Japanese
-               as.numeric(ab_p_demo__race__slf_001___22) == 1 |  # Korean
-               as.numeric(ab_p_demo__race__slf_001___23) == 1 |  # Vietnamese
-               as.numeric(ab_p_demo__race__slf_001___24) == 1,   # Other Asian
-    .r_other = as.numeric(ab_p_demo__race__slf_001___25) == 1,   # Other Race
-    .r_dta   = as.numeric(ab_p_demo__race__slf_001___777) == 1,  # Decline to answer
-    .r_dk    = as.numeric(ab_p_demo__race__slf_001___999) == 1,  # Don't know
-
-    # Sum of substantive race flags only
-    .r_sum = rowSums(
-      cbind(.r_white, .r_black, .r_aian, .r_nhpi, .r_asian, .r_other),
-      na.rm = TRUE
-    ),
-
-    mat_race = case_when(
-      .r_dta | .r_dk               ~ NA_character_,
-      .r_sum > 1                   ~ "Multiracial",
-      .r_white & .r_sum == 1      ~ "White",
-      .r_black & .r_sum == 1      ~ "Black/African American",
-      .r_aian  & .r_sum == 1      ~ "American Indian/Alaska Native",
-      .r_nhpi  & .r_sum == 1      ~ "Native Hawaiian/Pacific Islander",
-      .r_asian & .r_sum == 1      ~ "Asian",
-      .r_other & .r_sum == 1      ~ "Other",
-      .r_sum == 0                  ~ NA_character_,
-      TRUE                         ~ NA_character_
-    ),
-
-    mat_race = factor(mat_race, levels = c(
-      "White",
-      "Black/African American",
-      "American Indian/Alaska Native",
-      "Native Hawaiian/Pacific Islander",
-      "Asian",
-      "Other",
-      "Multiracial"
-    ))
-  ) %>%
-  select(-starts_with(".r_"))
-
-# -----------------------------
-# 4) Verify
-# -----------------------------
-str(Cov_baseline$ab_g_dyn__cohort_income__hhold__6lvl)
-str(Cov_baseline$ab_g_dyn__cohort_edu__cgs)
-str(Cov_baseline$mom_age_preg)
-str(Cov_baseline$planned_preg)
-str(Cov_baseline$prenatal_vit)
-str(Cov_baseline$mh_p_famhx__dep__moth_001)
-str(Cov_baseline$mat_race)
-
-table(Cov_baseline$ab_g_dyn__cohort_income__hhold__6lvl, useNA = "ifany")
-table(Cov_baseline$ab_g_dyn__cohort_edu__cgs, useNA = "ifany")
-table(Cov_baseline$planned_preg, useNA = "ifany")
-table(Cov_baseline$prenatal_vit, useNA = "ifany")
-table(Cov_baseline$mh_p_famhx__dep__moth_001, useNA = "ifany")
-table(Cov_baseline$mat_race, useNA = "ifany")
-summary(Cov_baseline$mom_age_preg)
